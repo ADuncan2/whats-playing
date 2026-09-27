@@ -1,0 +1,107 @@
+name: Android release
+
+# Runs on every push to master, and by hand (Actions tab -> "Android release" -> "Run workflow").
+# Every run analyzes, tests and builds, and uploads the APK / app bundle as workflow artifacts.
+# A GitHub Release (with the APK attached) is created only when `version:` in pubspec.yaml is one
+# that has not been released yet: bump it to cut a release, leave it alone for a plain build.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create the tag and the GitHub Release
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep -E '^version:' pubspec.yaml | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          if [ -z "$VERSION" ]; then
+            echo "Could not read version from pubspec.yaml" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version v$VERSION"
+
+      # On a push an existing tag just means "no new release this time". When run by hand it is
+      # an error, as before: you asked for a release, so bump the version and re-run.
+      - name: Check whether this version is already released
+        id: tag
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "Tag $TAG already exists. Bump 'version:' in pubspec.yaml and re-run." >&2
+              exit 1
+            fi
+            echo "Tag $TAG already exists: building without a release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag $TAG is new: a release will be created."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.38.6'   # keep in step with `flutter --version` locally
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      # TFL_APP_KEY is optional. If the repository secret is not set this expands to an empty
+      # string and the app makes anonymous (rate-limited) TfL calls until the user pastes their
+      # own key into Settings. Leave it unset if the repo is public: the key is compiled into the APK.
+      - name: Build release APK
+        run: flutter build apk --release --dart-define=TFL_APP_KEY=${{ secrets.TFL_APP_KEY }}
+
+      - name: Build release app bundle
+        run: flutter build appbundle --release --dart-define=TFL_APP_KEY=${{ secrets.TFL_APP_KEY }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whats-playing-apk-v${{ steps.version.outputs.version }}-${{ github.run_number }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload app bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whats-playing-aab-v${{ steps.version.outputs.version }}-${{ github.run_number }}
+          path: build/app/outputs/bundle/release/app-release.aab
+
+      - name: Create GitHub release
+        if: steps.tag.outputs.release == 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          commit: ${{ github.sha }}
+          generateReleaseNotes: true
+          artifacts: build/app/outputs/flutter-apk/app-release.apk,build/app/outputs/bundle/release/app-release.aab

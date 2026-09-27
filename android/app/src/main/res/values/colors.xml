@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The launcher icon's background: the web icon's cinema-seat red. -->
+    <color name="ic_launcher_background">#8E1B2E</color>
+</resources>

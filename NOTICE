@@ -1,0 +1,5 @@
+WhatsPlaying's code is licensed under the MIT licence (see LICENSE). That licence does not cover:
+- the TMDB logo (assets/tmdb_logo.png), a trademark of TMDB, used under the TMDB API Terms of Use;
+- data the app downloads at runtime: screenings from Clusterflick (CC BY 4.0), film details and
+  posters from TMDB, journeys from TfL, postcodes from postcodes.io, map tiles from OpenStreetMap.
+  Their terms and credits are listed on the app's Credits and licences screen.

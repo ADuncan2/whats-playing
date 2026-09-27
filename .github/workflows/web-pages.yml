@@ -1,0 +1,66 @@
+name: Web (GitHub Pages)
+
+# Builds the Flutter web version and publishes it to https://aduncan2.github.io/whats-playing/
+# (the iPhone route: open it in Safari, Share -> Add to Home Screen).
+# Runs on every push to master, and by hand (Actions tab -> "Web (GitHub Pages)" -> "Run workflow").
+#
+# One-off setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write      # publish to Pages
+  id-token: write   # proves to Pages that this workflow is allowed to
+
+# One deploy at a time; a newer push waits rather than cancelling a deploy halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.38.6'   # keep in step with android-release.yml and `flutter --version`
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      # No TfL key here on purpose: anything compiled into a web build can be read by anyone who
+      # opens the site. Paste your own key into Settings in the app instead (kept in the browser).
+      # The base href is the repo name because a project site lives at /<repo>/, not at the root.
+      - name: Build web
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build   # a failed build or test leaves the previous site live
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
