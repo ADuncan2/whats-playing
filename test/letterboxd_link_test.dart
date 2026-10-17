@@ -1,5 +1,5 @@
-// Settings -> Letterboxd: import an export, see the watchlist strip on Home, search from it with
-// "Hide films I've seen", then unlink. The file picker, RSS fetch and store are faked.
+// Settings -> Letterboxd: import an export, see the watchlist strip on Home, expand a film to its
+// screenings, use "Hide films I've seen", then unlink. The file picker, RSS fetch and store are faked.
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -18,7 +18,8 @@ import 'package:whats_playing/features/search_form/search_form.dart';
 import 'package:whats_playing/features/settings/letterboxd_screen.dart';
 import 'package:whats_playing/state/app_state.dart';
 
-/// Alpha (2026) and Beta (2020) at one cinema, 1 and 2 hours from now.
+/// Alpha (2026) and Beta (2020) at one cinema, 1 and 2 hours from now. Alpha also has a
+/// sold-out screening 3 hours from now: not counted in the strip, shown disabled when expanded.
 class _FakeListings extends ListingsNotifier {
   @override
   Future<Listings> build() async {
@@ -42,7 +43,8 @@ class _FakeListings extends ListingsNotifier {
         {'film': 'f2', 'venue': 'v'},
       ],
       'performances': [
-        [0, inHours(1), null, 0],
+        [0, inHours(1), 'https://example.com/book/alpha', 0],
+        [0, inHours(3), 'https://example.com/book/alpha-late', 1], // sold out
         [1, inHours(2), null, 0],
       ],
     });
@@ -123,7 +125,7 @@ void main() {
     expect(find.byType(LetterboxdScreen), findsOneWidget);
   }
 
-  testWidgets('link, watchlist on Home, search from it with hide-seen, unlink', (tester) async {
+  testWidgets('link, watchlist on Home, expand a film to its screenings, hide-seen, unlink', (tester) async {
     await openApp(tester);
     // Not linked yet: the watchlist is on Home, greyed out, with a line saying how to turn it on.
     expect(find.text('On your watchlist this week'), findsOneWidget);
@@ -185,14 +187,28 @@ void main() {
     expect(find.textContaining('1 cinema · 1 screening'), findsOneWidget);
     expect(find.textContaining('Refresh your Letterboxd'), findsNothing); // export is fresh
 
-    // Tapping it opens the search form preset to that film, with the hide-seen toggle available.
+    // Tapping it expands the tile in place: the cinema, with the bookable time live and the
+    // sold-out one disabled. No search is opened.
     await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Find films'), findsNothing);
+    expect(find.text('Curzon Soho'), findsOneWidget);
+    expect(find.byType(ActionChip), findsNWidgets(2));
+    final chips = tester.widgetList<ActionChip>(find.byType(ActionChip)).toList();
+    expect(chips.where((c) => c.onPressed != null), hasLength(1));
+    expect(find.textContaining('sold out'), findsOneWidget);
+
+    // Tapping again collapses it.
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ActionChip), findsNothing);
+    expect(find.text('Curzon Soho'), findsNothing);
+
+    // The search form (via Solo) has the hide-seen toggle, now available.
+    await tester.tap(find.text('Solo'));
     await tester.pumpAndSettle();
     expect(find.text('Find films'), findsOneWidget);
     final form = find.descendant(of: find.byType(SearchForm), matching: find.byType(Scrollable)).first;
-    await tester.scrollUntilVisible(find.text('Films'), 150, scrollable: form);
-    await tester.pumpAndSettle();
-    expect(find.text('Alpha'), findsOneWidget); // the Films filter row's value
     await tester.scrollUntilVisible(find.text("Hide films I've seen"), 150, scrollable: form);
     await tester.pumpAndSettle();
     expect(tester.widget<Switch>(find.byType(Switch).last).value, isFalse);

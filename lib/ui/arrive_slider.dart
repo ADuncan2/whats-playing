@@ -37,8 +37,7 @@ class ArriveSlider extends StatelessWidget {
           leading: Icon(Icons.local_activity_outlined, color: theme.colorScheme.primary),
           title: const Text('Arrive'),
           subtitle: const Text(
-            'How long before or after the listed time do you want to arrive? At some cinemas, '
-            'but not all, the listed time is when the ads and trailers start. Viewer discretion is advised.',
+            'Some cinemas list when the ads start, not the film. Viewer discretion is advised.',
           ),
           trailing: Text(arriveLabel(value), style: theme.textTheme.titleSmall),
         ),

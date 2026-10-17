@@ -58,11 +58,7 @@ final searchDraftProvider = NotifierProvider<SearchDraftNotifier, SearchDraft?>(
 /// defaults from Settings, any cinema/film/genre), so the usual path is still: Solo -> Find films.
 /// Nothing picked here is saved: the next new search starts from the defaults again.
 class SearchForm extends ConsumerStatefulWidget {
-  const SearchForm({super.key, this.initialFilms = const {}, this.initialDay});
-
-  /// Preset from the home page's watchlist strip: these film titles, on this day (if it is covered).
-  final Set<String> initialFilms;
-  final DateTime? initialDay;
+  const SearchForm({super.key});
 
   @override
   ConsumerState<SearchForm> createState() => _SearchFormState();
@@ -115,9 +111,8 @@ class _SearchFormState extends ConsumerState<SearchForm> {
     _endPostcode = TextEditingController();
     _arrive = s.arriveMin;
     _hideSeen = s.hideSeen;
-    _day = days.contains(widget.initialDay) ? widget.initialDay! : days.first;
+    _day = days.first;
     _free = _defaultFree(_day);
-    _films = {...widget.initialFilms};
   }
 
   /// A default changed in Settings while this form was open: take the new value.

@@ -59,17 +59,10 @@ class _ShellState extends ConsumerState<Shell> {
   /// The Home tab: the mode picker, or (once Solo is picked) the search form and its results.
   bool _solo = false;
 
-  /// A watchlist film tapped on the home page: the form opens preset to it. Each tap is a fresh form.
-  FilmPick? _pick;
-  int _pickN = 0;
-
   void _goHome() {
     ref.read(resultsProvider.notifier).clear();
     ref.read(searchDraftProvider.notifier).clear();
-    setState(() {
-      _solo = false;
-      _pick = null;
-    });
+    setState(() => _solo = false);
   }
 
   @override
@@ -81,24 +74,13 @@ class _ShellState extends ConsumerState<Shell> {
         key: const ValueKey('modes'),
         onSolo: () {
           ref.read(searchDraftProvider.notifier).clear();
-          setState(() {
-            _solo = true;
-            _pick = null;
-          });
+          setState(() => _solo = true);
         },
-        onFilm: (pick) => setState(() {
-          ref.read(searchDraftProvider.notifier).clear();
-          _solo = true;
-          _pick = pick;
-          _pickN++;
-        }),
       );
     } else if (hasResults) {
       homeTab = const ResultsScreen(key: ValueKey('results'));
     } else {
-      homeTab = _pick == null
-          ? const SearchForm(key: ValueKey('form'))
-          : SearchForm(key: ValueKey('form-pick-$_pickN'), initialFilms: {_pick!.title}, initialDay: _pick!.day);
+      homeTab = const SearchForm(key: ValueKey('form'));
     }
     return PopScope(
       // Back goes: other tab -> Home tab -> results -> search form -> mode picker -> leave the app.

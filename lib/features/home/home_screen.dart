@@ -1,25 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/format.dart';
 import '../../core/london_time.dart';
+import '../../data/listings.dart';
 import '../../engine/film_match.dart';
 import '../../state/app_state.dart';
+import '../../ui/links.dart';
 import '../settings/letterboxd_screen.dart';
-
-/// A watchlist film the user tapped: search for it on the day of its next screening.
-typedef FilmPick = ({String title, DateTime day});
 
 /// The main page from the wireframe: pick a mode. Solo is the app; Group is on its way. With
 /// Letterboxd linked, the watchlist films playing this week sit above the modes.
 class HomeScreen extends ConsumerWidget {
-  const HomeScreen({super.key, required this.onSolo, required this.onFilm});
+  const HomeScreen({super.key, required this.onSolo});
 
   /// Called when the user picks Solo.
   final VoidCallback onSolo;
-
-  /// Called when the user taps a watchlist film.
-  final void Function(FilmPick pick) onFilm;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,7 +39,7 @@ class HomeScreen extends ConsumerWidget {
               'Which London screenings can you get to, watch, and still be back in time?',
               style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
-            _WatchlistStrip(onFilm: onFilm),
+            const _WatchlistStrip(),
             const SizedBox(height: 32),
             Text('How are you going?', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
@@ -72,8 +69,7 @@ class HomeScreen extends ConsumerWidget {
 /// soonest first. Greyed out, with a nudge to link, until Letterboxd is linked. Nudges when the
 /// export is old.
 class _WatchlistStrip extends ConsumerWidget {
-  const _WatchlistStrip({required this.onFilm});
-  final void Function(FilmPick pick) onFilm;
+  const _WatchlistStrip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -160,16 +156,12 @@ class _WatchlistStrip extends ConsumerWidget {
                 children: [
                   for (final (i, s) in shows.indexed) ...[
                     if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
-                    ListTile(
+                    _WatchlistTile(
                       key: ValueKey('watchlist-${s.film.id}'),
-                      title: Text(s.film.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                        '${dayLabel(dayOf(s.next), today)} ${hm(s.next)}'
-                        ' · ${s.cinemas} ${s.cinemas == 1 ? 'cinema' : 'cinemas'}'
-                        ' · ${s.screenings} ${s.screenings == 1 ? 'screening' : 'screenings'}',
-                      ),
-                      trailing: Icon(Icons.chevron_right, color: scheme.primary),
-                      onTap: () => onFilm((title: s.film.title, day: dayOf(s.next))),
+                      show: s,
+                      listings: listings,
+                      now: now,
+                      today: today,
                     ),
                   ],
                 ],
@@ -200,6 +192,82 @@ class _WatchlistStrip extends ConsumerWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// One watchlist film. The collapsed row summarises its week; tapping expands it in place to
+/// every cinema showing it, times grouped by day, each time a chip that opens the booking page.
+class _WatchlistTile extends StatefulWidget {
+  const _WatchlistTile({super.key, required this.show, required this.listings, required this.now, required this.today});
+
+  final WatchlistShowing show;
+  final Listings listings;
+  final tz.TZDateTime now;
+  final DateTime today;
+
+  @override
+  State<_WatchlistTile> createState() => _WatchlistTileState();
+}
+
+class _WatchlistTileState extends State<_WatchlistTile> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final s = widget.show;
+    return Column(
+      children: [
+        ListTile(
+          title: Text(s.film.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            '${dayLabel(dayOf(s.next), widget.today)} ${hm(s.next)}'
+            ' · ${s.cinemas} ${s.cinemas == 1 ? 'cinema' : 'cinemas'}'
+            ' · ${s.screenings} ${s.screenings == 1 ? 'screening' : 'screenings'}',
+          ),
+          trailing: Icon(_open ? Icons.expand_less : Icons.expand_more, color: scheme.primary),
+          onTap: () => setState(() => _open = !_open),
+        ),
+        if (_open) ...[
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The whole card grows and the page scrolls: no cap, no inner scrolling.
+                for (final (i, v) in filmScreenings(widget.listings, s.film.id, widget.now).indexed) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  Text(v.venue.name, style: theme.textTheme.titleSmall),
+                  for (final d in v.days) ...[
+                    const SizedBox(height: 4),
+                    Text(dayLabel(d.day, widget.today),
+                        style: theme.textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final sc in d.screenings)
+                          ActionChip(
+                            label: Text(hm(sc.start) +
+                                (sc.label != null ? ' ${sc.label}' : '') +
+                                (sc.soldOut ? ' sold out' : '')),
+                            onPressed: sc.soldOut || sc.bookingUrl == null
+                                ? null
+                                : () => openUrl(context, sc.bookingUrl),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

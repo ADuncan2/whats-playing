@@ -8,7 +8,9 @@ import 'package:whats_playing/engine/film_match.dart';
 import 'package:whats_playing/engine/search.dart';
 
 final day = DateTime.utc(2026, 9, 24);
-int unix(String hhmm) => parseClock(hhmm, day).millisecondsSinceEpoch ~/ 1000;
+final day2 = DateTime.utc(2026, 9, 25);
+int unixOn(String hhmm, DateTime d) => parseClock(hhmm, d).millisecondsSinceEpoch ~/ 1000;
+int unix(String hhmm) => unixOn(hhmm, day);
 
 Listings fixture() => Listings.fromJson({
   'schema': 1,
@@ -126,6 +128,68 @@ void main() {
     expect(all.map((s) => s.film.id), ['susp18', 'dune']);
     expect(all.last.cinemas, 2);
     expect(all.last.screenings, 2);
+  });
+
+  group('filmScreenings', () {
+    // Its own fixture: Dune at One (standard + a 70mm showing, and a next-day matinee) and at
+    // Two (one sold out), plus an unrelated film and a showing at an unknown venue.
+    final data = Listings.fromJson({
+      'schema': 1,
+      'from': '2026-09-24',
+      'days': 7,
+      'venues': {
+        'v1': {'name': 'One', 'lat': 51.52, 'lon': -0.13},
+        'v2': {'name': 'Two', 'lat': 51.51, 'lon': -0.10},
+      },
+      'films': {
+        'dune': {'title': 'Dune', 'year': '2021', 'tmdb': 438631},
+        'other': {'title': 'Other Film'},
+      },
+      'showings': [
+        {'film': 'dune', 'venue': 'v1', 'runtime': 150},
+        {'film': 'dune', 'venue': 'v1', 'title': 'Dune (70mm)', 'runtime': 150},
+        {'film': 'dune', 'venue': 'v2', 'runtime': 150},
+        {'film': 'other', 'venue': 'v1'},
+        {'film': 'dune', 'venue': 'vX'},
+      ],
+      'performances': [
+        [0, unix('19:30'), 'https://book/1930', 0],
+        [0, unixOn('15:00', day2), null, 0],
+        [1, unix('21:30'), 'https://book/70mm', 0],
+        [2, unix('20:00'), null, 0],
+        [2, unix('21:00'), 'https://book/soldout', 1], // sold out
+        [3, unix('19:00'), null, 0], // another film
+        [4, unix('19:00'), null, 0], // unknown venue
+      ],
+    });
+
+    test('groups venue -> day, venues by soonest, sold-out included, format label kept', () {
+      final out = filmScreenings(data, 'dune', parseClock('12:00', day));
+      expect(out.map((v) => v.venue.id), ['v1', 'v2']); // 19:30 before 20:00; vX dropped
+
+      final one = out.first;
+      expect(one.days.map((d) => d.day), [day, day2]);
+      expect(one.days.first.screenings.map((s) => s.start), [parseClock('19:30', day), parseClock('21:30', day)]);
+      expect(one.days.first.screenings.map((s) => s.label), [null, 'Dune (70mm)']);
+      expect(one.days.first.screenings.map((s) => s.bookingUrl), ['https://book/1930', 'https://book/70mm']);
+      expect(one.days.last.screenings.single.start, parseClock('15:00', day2));
+
+      final two = out.last;
+      expect(two.days.single.screenings.map((s) => s.start), [parseClock('20:00', day), parseClock('21:00', day)]);
+      expect(two.days.single.screenings.map((s) => s.soldOut), [false, true]);
+    });
+
+    test('past screenings drop out and the venue order follows', () {
+      final out = filmScreenings(data, 'dune', parseClock('19:45', day));
+      expect(out.map((v) => v.venue.id), ['v2', 'v1']); // One's next is now 21:30
+      expect(out.last.days.map((d) => d.day), [day, day2]);
+      expect(out.last.days.first.screenings.single.start, parseClock('21:30', day));
+    });
+
+    test('a film with nothing left is empty', () {
+      expect(filmScreenings(data, 'dune', parseClock('16:00', day2)), isEmpty);
+      expect(filmScreenings(data, 'missing', parseClock('12:00', day)), isEmpty);
+    });
   });
 
   test('plan(): excluded (seen) films drop out before any routing, with a funnel step', () {

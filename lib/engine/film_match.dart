@@ -136,3 +136,56 @@ List<WatchlistShowing> watchlistShowings(Listings data, Set<String> onWatchlist,
     return c != 0 ? c : a.film.title.compareTo(b.film.title);
   });
 }
+
+/// One screening of a film: when, the booking link, and the cinema's own title when it
+/// differs from the film's (a format or event variant, e.g. "Dune (70mm)").
+class FilmScreening {
+  const FilmScreening({required this.start, this.bookingUrl, this.soldOut = false, this.label});
+  final tz.TZDateTime start;
+  final String? bookingUrl;
+  final bool soldOut;
+  final String? label;
+}
+
+/// A venue's upcoming screenings of one film, grouped by calendar day
+/// (days ascending, times ascending within a day).
+class VenueScreenings {
+  const VenueScreenings({required this.venue, required this.days});
+  final Venue venue;
+  final List<({DateTime day, List<FilmScreening> screenings})> days;
+}
+
+/// Every screening of [filmId] at or after [now] at known venues, grouped venue -> day.
+/// Sold-out screenings are included (shown disabled), unlike [watchlistShowings], which
+/// only counts bookable ones. Venues come soonest screening first, then by name.
+List<VenueScreenings> filmScreenings(Listings data, String filmId, tz.TZDateTime now) {
+  final title = data.films[filmId]?.title;
+  final byVenue = <String, List<FilmScreening>>{};
+  for (final p in data.performances) {
+    final s = data.showings[p.showing];
+    if (s.film != filmId || !data.venues.containsKey(s.venue)) continue;
+    final start = fromUnix(p.start);
+    if (start.isBefore(now)) continue;
+    byVenue.putIfAbsent(s.venue, () => []).add(FilmScreening(
+      start: start,
+      bookingUrl: p.bookingUrl,
+      soldOut: p.soldOut,
+      label: s.title != null && s.title != title ? s.title : null,
+    ));
+  }
+  final out = <VenueScreenings>[];
+  for (final e in byVenue.entries) {
+    e.value.sort((a, b) => a.start.compareTo(b.start));
+    final days = <({DateTime day, List<FilmScreening> screenings})>[];
+    for (final sc in e.value) {
+      final day = dayOf(sc.start);
+      if (days.isEmpty || days.last.day != day) days.add((day: day, screenings: []));
+      days.last.screenings.add(sc);
+    }
+    out.add(VenueScreenings(venue: data.venues[e.key]!, days: days));
+  }
+  return out..sort((a, b) {
+    final c = a.days.first.screenings.first.start.compareTo(b.days.first.screenings.first.start);
+    return c != 0 ? c : a.venue.name.compareTo(b.venue.name);
+  });
+}
