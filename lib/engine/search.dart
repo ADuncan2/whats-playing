@@ -104,9 +104,6 @@ class Candidate {
   final String summary;
   final String? year, certificate;
   final List<String> genres;
-
-  /// Full TMDB image URL at a given width, e.g. 'w154', 'w500'.
-  String? posterUrl([String size = 'w500']) => poster == null ? null : '$posterBaseUrl$size$poster';
 }
 
 class Traveller {

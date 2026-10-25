@@ -1,5 +1,6 @@
 // Settings -> Letterboxd: import an export, see the watchlist strip on Home, expand a film to its
 // screenings, use "Hide films I've seen", then unlink. The file picker, RSS fetch and store are faked.
+// Also the film search on Home, which sits beside the watchlist but needs no Letterboxd.
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -14,6 +15,7 @@ import 'package:whats_playing/data/letterboxd/letterboxd_data.dart';
 import 'package:whats_playing/data/letterboxd/letterboxd_store.dart';
 import 'package:whats_playing/data/listings.dart';
 import 'package:whats_playing/data/settings_store.dart';
+import 'package:whats_playing/features/results/film_details.dart';
 import 'package:whats_playing/features/search_form/search_form.dart';
 import 'package:whats_playing/features/settings/letterboxd_screen.dart';
 import 'package:whats_playing/state/app_state.dart';
@@ -238,6 +240,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('On your watchlist this week'), findsOneWidget);
     expect(find.textContaining('Link Letterboxd in Settings to see'), findsOneWidget);
+  });
+
+  testWidgets('search any film on Home, no Letterboxd needed, and expand a result', (tester) async {
+    await openApp(tester);
+    expect(find.text('Is it showing?'), findsOneWidget);
+    final bar = find.byType(SearchBar);
+
+    await tester.enterText(bar, 'a'); // one letter: no results yet
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha (2026)'), findsNothing);
+
+    await tester.enterText(bar, 'alp');
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha (2026)'), findsOneWidget);
+    expect(find.textContaining('1 cinema · 1 screening'), findsOneWidget);
+    expect(find.byType(Poster), findsOneWidget); // no poster path in the fixture: the placeholder
+
+    await tester.tap(find.text('Alpha (2026)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Curzon Soho'), findsOneWidget);
+    expect(find.byType(ActionChip), findsNWidgets(2));
+
+    await tester.enterText(bar, 'gamma');
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing matching "gamma" with tickets left in the next 7 days.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Clear'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Nothing matching'), findsNothing);
+    expect(tester.widget<SearchBar>(bar).controller?.text, '');
   });
 
   testWidgets('a ZIP that is not an export is refused, and cancelling the picker does nothing', (tester) async {

@@ -101,22 +101,22 @@ FilmMatches matchFilms(Listings data, LetterboxdData lb) {
   return FilmMatches(onWatchlist: matchEntries(data, lb.watchlist), seen: seen);
 }
 
-/// A watchlist film with screenings still to come: the next one, and how widely it is on.
-class WatchlistShowing {
-  const WatchlistShowing({required this.film, required this.next, required this.cinemas, required this.screenings});
+/// A film with screenings still to come: the next one, and how widely it is on.
+class FilmShowing {
+  const FilmShowing({required this.film, required this.next, required this.cinemas, required this.screenings});
   final Film film;
   final tz.TZDateTime next;
   final int cinemas, screenings;
 }
 
-/// The watchlist films with a screening (not sold out) at or after [now], soonest first.
-List<WatchlistShowing> watchlistShowings(Listings data, Set<String> onWatchlist, tz.TZDateTime now) {
-  if (onWatchlist.isEmpty) return const [];
+/// The [films] with a screening (not sold out) at or after [now], soonest first.
+List<FilmShowing> upcomingShowings(Listings data, Set<String> films, tz.TZDateTime now) {
+  if (films.isEmpty) return const [];
   final next = <String, tz.TZDateTime>{}, venues = <String, Set<String>>{}, count = <String, int>{};
   for (final p in data.performances) {
     if (p.soldOut) continue;
     final s = data.showings[p.showing];
-    if (!onWatchlist.contains(s.film) || !data.venues.containsKey(s.venue)) continue;
+    if (!films.contains(s.film) || !data.venues.containsKey(s.venue)) continue;
     final start = fromUnix(p.start);
     if (start.isBefore(now)) continue;
     if (next[s.film] == null || start.isBefore(next[s.film]!)) next[s.film] = start;
@@ -125,7 +125,7 @@ List<WatchlistShowing> watchlistShowings(Listings data, Set<String> onWatchlist,
   }
   return [
     for (final e in next.entries)
-      WatchlistShowing(
+      FilmShowing(
         film: data.films[e.key]!,
         next: e.value,
         cinemas: venues[e.key]!.length,
@@ -134,6 +134,37 @@ List<WatchlistShowing> watchlistShowings(Listings data, Set<String> onWatchlist,
   ]..sort((a, b) {
     final c = a.next.compareTo(b.next);
     return c != 0 ? c : a.film.title.compareTo(b.film.title);
+  });
+}
+
+/// The shortest query [searchShowings] answers: one letter would match half the window.
+const minSearchLength = 2;
+
+/// Films in the window whose title matches [query], with a screening (not sold out) at or after
+/// [now]. A title matches when every query word starts a word of it, in order and next to each
+/// other (after [normaliseTitle] on both): "dragon tat" finds "The Girl with the Dragon Tattoo",
+/// "art" does not find "Dune: Part Two". Best match first: the exact title, then titles starting
+/// with the query, then the rest; soonest first within each.
+List<FilmShowing> searchShowings(Listings data, String query, tz.TZDateTime now) {
+  final q = normaliseTitle(query);
+  if (q.length < minSearchLength) return const [];
+  final rank = <String, int>{};
+  for (final f in data.films.values) {
+    final t = normaliseTitle(f.title);
+    if (t == q) {
+      rank[f.id] = 0;
+    } else if (t.startsWith(q)) {
+      rank[f.id] = 1;
+    } else if (' $t'.contains(' $q')) {
+      rank[f.id] = 2;
+    }
+  }
+  if (rank.isEmpty) return const [];
+  return upcomingShowings(data, rank.keys.toSet(), now)..sort((a, b) {
+    final c = rank[a.film.id]!.compareTo(rank[b.film.id]!);
+    if (c != 0) return c;
+    final d = a.next.compareTo(b.next);
+    return d != 0 ? d : a.film.title.compareTo(b.film.title);
   });
 }
 
@@ -156,7 +187,7 @@ class VenueScreenings {
 }
 
 /// Every screening of [filmId] at or after [now] at known venues, grouped venue -> day.
-/// Sold-out screenings are included (shown disabled), unlike [watchlistShowings], which
+/// Sold-out screenings are included (shown disabled), unlike [upcomingShowings], which
 /// only counts bookable ones. Venues come soonest screening first, then by name.
 List<VenueScreenings> filmScreenings(Listings data, String filmId, tz.TZDateTime now) {
   final title = data.films[filmId]?.title;

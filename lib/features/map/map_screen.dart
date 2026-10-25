@@ -349,7 +349,7 @@ class _VenueSheetState extends ConsumerState<_VenueSheet> {
                   child: SizedBox(
                     width: 36,
                     height: 54,
-                    child: Poster(c: r.c, size: 'w154'),
+                    child: Poster(poster: r.c.poster, size: 'w154'),
                   ),
                 ),
                 title: Text(r.c.title),

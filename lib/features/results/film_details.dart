@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
+import '../../core/constants.dart';
 import '../../core/format.dart';
 import '../../engine/search.dart';
 import '../../ui/links.dart';
@@ -13,13 +14,17 @@ final posterCache = CacheManager(Config('posters', stalePeriod: const Duration(d
 
 /// The poster, or a plain titled panel for the ~15% of films without one.
 class Poster extends StatelessWidget {
-  const Poster({super.key, required this.c, this.size = 'w500'});
-  final Candidate c;
+  const Poster({super.key, required this.poster, this.size = 'w500'});
+
+  /// TMDB's poster path (`Film.poster`), e.g. '/abc.jpg'.
+  final String? poster;
+
+  /// TMDB image width, e.g. 'w154', 'w500'.
   final String size;
 
   @override
   Widget build(BuildContext context) {
-    final url = c.posterUrl(size);
+    final url = poster == null ? null : '$posterBaseUrl$size$poster';
     final scheme = Theme.of(context).colorScheme;
     final placeholder = Container(
       decoration: BoxDecoration(

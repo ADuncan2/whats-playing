@@ -9,6 +9,10 @@ A port of the Python prototype in `../Movie search`, laid out after `docs/wirefr
   to the end of the results as its answer comes in. The results are one row per film, with the other
   cinemas showing it behind; they can be narrowed by cinema chain, genre or film at any point, and
   once the search has finished sorted by leave time, start time, home time or journey length. Postcodes via postcodes.io, maps via OpenStreetMap. No backend.
+- **Is it showing?** A search bar on Home: type any film's title (from 2 letters) to see whether it
+  has a bookable screening anywhere in the listings window. Results expand in place like the
+  watchlist strip; matching is by normalised title and word starts (`searchShowings()` in
+  `lib/engine/film_match.dart`). No TfL lookups and no Letterboxd needed.
 
 ## Run
 

@@ -366,7 +366,7 @@ class _FilmRowState extends State<_FilmRow> {
                       child: SizedBox(
                         width: 54,
                         height: 81,
-                        child: Poster(c: c, size: 'w154'),
+                        child: Poster(poster: c.poster, size: 'w154'),
                       ),
                     ),
                   ),

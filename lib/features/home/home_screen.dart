@@ -8,10 +8,11 @@ import '../../data/listings.dart';
 import '../../engine/film_match.dart';
 import '../../state/app_state.dart';
 import '../../ui/links.dart';
+import '../results/film_details.dart';
 import '../settings/letterboxd_screen.dart';
 
-/// The main page from the wireframe: pick a mode. Solo is the app; Group is on its way. With
-/// Letterboxd linked, the watchlist films playing this week sit above the modes.
+/// The main page from the wireframe: pick a mode. Solo is the app; Group is on its way. Above the
+/// modes: a search for any film playing this week and, with Letterboxd linked, the watchlist films.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key, required this.onSolo});
 
@@ -39,6 +40,7 @@ class HomeScreen extends ConsumerWidget {
               'Which London screenings can you get to, watch, and still be back in time?',
               style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+            const _FilmSearch(),
             const _WatchlistStrip(),
             const SizedBox(height: 32),
             Text('How are you going?', style: theme.textTheme.titleMedium),
@@ -60,6 +62,125 @@ class HomeScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// "Is it showing?": type a film's title, see whether it is on anywhere in the listings window.
+/// Works without Letterboxd. Results are the same expanding tiles as the watchlist, on a tinted
+/// card of their own so the two sections don't blur together.
+class _FilmSearch extends ConsumerStatefulWidget {
+  const _FilmSearch();
+
+  /// More results than this and the list stops, asking for more letters.
+  static const maxResults = 10;
+
+  @override
+  ConsumerState<_FilmSearch> createState() => _FilmSearchState();
+}
+
+class _FilmSearchState extends ConsumerState<_FilmSearch> {
+  final _controller = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _clear() {
+    _controller.clear();
+    setState(() => _query = '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final listings = ref.watch(listingsProvider).value;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final searching = listings != null && normaliseTitle(_query).length >= minSearchLength;
+    final now = londonNow();
+    final shows = searching ? searchShowings(listings, _query, now) : const <FilmShowing>[];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.travel_explore, size: 20, color: scheme.secondary),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Is it showing?', style: theme.textTheme.titleMedium)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SearchBar(
+            controller: _controller,
+            hintText: 'Search any film',
+            leading: Icon(Icons.search, color: scheme.onSecondaryContainer),
+            trailing: [
+              if (_query.isNotEmpty)
+                IconButton(tooltip: 'Clear', icon: const Icon(Icons.close), onPressed: _clear),
+            ],
+            elevation: const WidgetStatePropertyAll(0),
+            backgroundColor: WidgetStatePropertyAll(scheme.secondaryContainer.withValues(alpha: 0.6)),
+            padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
+            textInputAction: TextInputAction.search,
+            onChanged: (v) => setState(() => _query = v),
+            onTapOutside: (_) => FocusScope.of(context).unfocus(),
+          ),
+          if (searching) ...[
+            const SizedBox(height: 10),
+            if (shows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'Nothing matching "${_query.trim()}" with tickets left in the next ${listings.days} days.',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              )
+            else
+              Card(
+                margin: EdgeInsets.zero,
+                elevation: 0,
+                color: scheme.secondaryContainer.withValues(alpha: 0.35),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: scheme.secondary.withValues(alpha: 0.4)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    for (final (i, s) in shows.take(_FilmSearch.maxResults).indexed) ...[
+                      if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+                      _FilmTile(
+                        key: ValueKey('search-${s.film.id}'),
+                        show: s,
+                        listings: listings,
+                        now: now,
+                        today: dayOf(now),
+                        showYear: true,
+                        showPoster: true,
+                      ),
+                    ],
+                    if (shows.length > _FilmSearch.maxResults) ...[
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          '${shows.length - _FilmSearch.maxResults} more: keep typing to narrow it down',
+                          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ],
       ),
     );
   }
@@ -124,7 +245,7 @@ class _WatchlistStrip extends ConsumerWidget {
     if (listings == null) return const SizedBox.shrink();
     final now = londonNow();
     final today = dayOf(now);
-    final shows = watchlistShowings(listings, ref.watch(filmMatchesProvider).onWatchlist, now);
+    final shows = upcomingShowings(listings, ref.watch(filmMatchesProvider).onWatchlist, now);
     final age = DateTime.now().difference(lb.importedAt);
     final stale = age > letterboxdExportStale;
 
@@ -156,7 +277,7 @@ class _WatchlistStrip extends ConsumerWidget {
                 children: [
                   for (final (i, s) in shows.indexed) ...[
                     if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
-                    _WatchlistTile(
+                    _FilmTile(
                       key: ValueKey('watchlist-${s.film.id}'),
                       show: s,
                       listings: listings,
@@ -196,21 +317,32 @@ class _WatchlistStrip extends ConsumerWidget {
   }
 }
 
-/// One watchlist film. The collapsed row summarises its week; tapping expands it in place to
-/// every cinema showing it, times grouped by day, each time a chip that opens the booking page.
-class _WatchlistTile extends StatefulWidget {
-  const _WatchlistTile({super.key, required this.show, required this.listings, required this.now, required this.today});
+/// One film (on the watchlist, or a search result). The collapsed row summarises its week;
+/// tapping expands it in place to every cinema showing it, times grouped by day, each time a
+/// chip that opens the booking page. [showYear] adds the year to the title, to tell remakes apart;
+/// [showPoster] puts a poster thumbnail in front, so a search result can be recognised at a glance.
+class _FilmTile extends StatefulWidget {
+  const _FilmTile({
+    super.key,
+    required this.show,
+    required this.listings,
+    required this.now,
+    required this.today,
+    this.showYear = false,
+    this.showPoster = false,
+  });
 
-  final WatchlistShowing show;
+  final FilmShowing show;
   final Listings listings;
   final tz.TZDateTime now;
   final DateTime today;
+  final bool showYear, showPoster;
 
   @override
-  State<_WatchlistTile> createState() => _WatchlistTileState();
+  State<_FilmTile> createState() => _FilmTileState();
 }
 
-class _WatchlistTileState extends State<_WatchlistTile> {
+class _FilmTileState extends State<_FilmTile> {
   bool _open = false;
 
   @override
@@ -221,7 +353,17 @@ class _WatchlistTileState extends State<_WatchlistTile> {
     return Column(
       children: [
         ListTile(
-          title: Text(s.film.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          leading: widget.showPoster
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(width: 36, height: 54, child: Poster(poster: s.film.poster, size: 'w154')),
+                )
+              : null,
+          title: Text(
+            widget.showYear && s.film.year != null ? '${s.film.title} (${s.film.year})' : s.film.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           subtitle: Text(
             '${dayLabel(dayOf(s.next), widget.today)} ${hm(s.next)}'
             ' · ${s.cinemas} ${s.cinemas == 1 ? 'cinema' : 'cinemas'}'

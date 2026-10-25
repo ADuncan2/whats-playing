@@ -158,7 +158,7 @@ in `profile.csv`) and a live diary feed (review, watch and list items; `tmdb:mov
 | ZIP -> `LetterboxdData` (csv package, header lookup, filename date/username, `profile.csv` username wins) | `lib/data/letterboxd/letterboxd_import.dart` |
 | RSS -> `{tmdbId: watchedDate}` (skips list items, keeps the latest date for rewatches, plain `User-Agent: WhatsPlaying/1.1`) | `lib/data/letterboxd/letterboxd_rss.dart` |
 | JSON file store (`letterboxd.json` in the app support dir), in-memory store for tests | `lib/data/letterboxd/letterboxd_store.dart` |
-| Matching rules 1-3 + `watchlistShowings()` for the Home strip | `lib/engine/film_match.dart` |
+| Matching rules 1-3 + `upcomingShowings()` for the Home strip | `lib/engine/film_match.dart` |
 | `SearchOptions.excludeFilms`, applied in `plan()` with a funnel step, before routing | `lib/engine/search.dart` |
 | Providers: store, RSS fetcher, `LetterboxdNotifier` (import / setUsername / refreshRss / unlink; RSS at most every 6 h on open), `filmMatchesProvider` | `lib/state/app_state.dart` |
 | Linking screen (steps as in section 2; Re-import / Unlink; username + "Check now") | `lib/features/settings/letterboxd_screen.dart` |

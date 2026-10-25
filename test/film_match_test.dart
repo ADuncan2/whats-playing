@@ -117,17 +117,70 @@ void main() {
     expect(m.seen, {'amelie', 'dragon'});
   });
 
-  test('watchlistShowings: next screening from now, cinema and screening counts, sold-out ignored', () {
-    final shows = watchlistShowings(data, {'dune', 'susp18', 'amelie'}, parseClock('19:45', day));
+  test('upcomingShowings: next screening from now, cinema and screening counts, sold-out ignored', () {
+    final shows = upcomingShowings(data, {'dune', 'susp18', 'amelie'}, parseClock('19:45', day));
     expect(shows.map((s) => s.film.id), ['dune']); // Suspiria 18:00 and Amélie 19:00 have gone
     expect(shows.single.next, parseClock('20:00', day));
     expect(shows.single.cinemas, 1);
     expect(shows.single.screenings, 1);
 
-    final all = watchlistShowings(data, {'dune', 'susp18'}, parseClock('12:00', day));
+    final all = upcomingShowings(data, {'dune', 'susp18'}, parseClock('12:00', day));
     expect(all.map((s) => s.film.id), ['susp18', 'dune']);
     expect(all.last.cinemas, 2);
     expect(all.last.screenings, 2);
+  });
+
+  group('searchShowings', () {
+    final noon = parseClock('12:00', day);
+    List<String> ids(String q, [DateTime? at]) =>
+        searchShowings(data, q, at == null ? noon : parseClock('12:00', at)).map((s) => s.film.id).toList();
+
+    test('matches normalised titles: case, accents, a leading The, word starts', () {
+      expect(ids('dune'), ['dune']);
+      expect(ids('AMELIE'), ['amelie']);
+      expect(ids('amé'), ['amelie']);
+      expect(ids('the dune'), ['dune']);
+      expect(ids('une'), isEmpty); // not the start of a word
+    });
+
+    test('only films with a bookable screening still to come', () {
+      expect(ids('suspiria'), ['susp18']); // the 1977 one isn't playing
+      expect(ids('fast'), isEmpty); // in the films, but no screenings
+      expect(ids('dune', day2), isEmpty); // all gone by tomorrow
+    });
+
+    test('too short, or nothing left after normalising', () {
+      expect(ids('d'), isEmpty);
+      expect(ids('  '), isEmpty);
+      expect(ids('!!'), isEmpty);
+    });
+
+    test('exact title first, then titles starting with the query, then the rest', () {
+      final data = Listings.fromJson({
+        'schema': 1,
+        'from': '2026-09-24',
+        'days': 7,
+        'venues': {
+          'v': {'name': 'One', 'lat': 51.52, 'lon': -0.13},
+        },
+        'films': {
+          'mid': {'title': 'Return of the Alien'},
+          'starts': {'title': 'Alien Romulus'},
+          'exact': {'title': 'Alien'},
+        },
+        'showings': [
+          {'film': 'mid', 'venue': 'v'},
+          {'film': 'starts', 'venue': 'v'},
+          {'film': 'exact', 'venue': 'v'},
+        ],
+        'performances': [
+          [0, unix('13:00'), null, 0],
+          [1, unix('14:00'), null, 0],
+          [2, unix('15:00'), null, 0],
+        ],
+      });
+      expect(searchShowings(data, 'alien', noon).map((s) => s.film.id), ['exact', 'starts', 'mid']);
+    });
   });
 
   group('filmScreenings', () {
